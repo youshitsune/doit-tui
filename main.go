@@ -48,6 +48,27 @@ func list(cfg config) string {
 	return string(res.Body)
 }
 
+func add(cfg config, task string) bool {
+	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"task":     task,
+		},
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if res.StatusCode() == 200 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func main() {
 	cfg := load_config()
 	fmt.Println(list(cfg))
