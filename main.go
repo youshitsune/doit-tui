@@ -19,6 +19,8 @@ type config struct {
 	password string
 }
 
+var cfg = load_config()
+
 func load_config() config {
 	config_path := path.Join(os.ExpandEnv("$XDG_CONFIG_HOME"), "/doit/config.yaml")
 	if err := conf.Load(file.Provider(config_path), yaml.Parser()); err != nil {
@@ -32,7 +34,7 @@ func load_config() config {
 	return cfg
 }
 
-func list(cfg config) string {
+func list() string {
 	res, err := fetch.Post(cfg.url+"/list", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
@@ -48,7 +50,7 @@ func list(cfg config) string {
 	return string(res.Body)
 }
 
-func add(cfg config, task string) bool {
+func add(task string) bool {
 	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
@@ -69,7 +71,27 @@ func add(cfg config, task string) bool {
 	}
 }
 
+func done(id string) bool {
+	res, err := fetch.Post(cfg.url+"/done", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+		},
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if res.StatusCode() == 200 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func main() {
-	cfg := load_config()
-	fmt.Println(list(cfg))
+	fmt.Println(list())
 }
