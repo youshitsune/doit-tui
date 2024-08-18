@@ -92,6 +92,27 @@ func done(id string) bool {
 	}
 }
 
+func delete(id string) bool {
+	res, err := fetch.Post(cfg.url+"/delete", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+		},
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if res.StatusCode() == 200 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func main() {
 	fmt.Println(list())
 }
