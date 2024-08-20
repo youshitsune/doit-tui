@@ -129,6 +129,7 @@ type model struct {
 	cursor   int
 	selected map[int]struct{}
 	update   bool
+	status   int // STATES: -1 - no status; 0 - failed status; 1 - successful status
 	input    textinput.Model
 	mode     int // STATES: 0 - change of state; 1 - delete tasks; 2 - add tasks
 }
@@ -144,6 +145,7 @@ func initialModel() model {
 		mode:     0,
 		update:   false,
 		input:    input,
+		status:   -1,
 	}
 }
 
@@ -179,10 +181,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				m.update = true
-			case "ctrl+c", "q":
+			case "ctrl+c":
 				return m, tea.Quit
+			case "ctrl+h":
+				m.mode = 0
+			case "ctrl+d":
+				m.mode = 2
 			}
-
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		} else {
@@ -209,11 +214,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
-		case "c":
+		case "ctrl+h":
 			m.mode = 0
-		case "a":
+		case "ctrl+a":
 			m.mode = 1
-		case "d":
+		case "ctrl+d":
 			m.mode = 2
 		}
 
@@ -224,18 +229,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case 0:
 			for i := range m.tasks {
 				if _, ok := m.selected[i]; ok {
-					done(m.tasks[i][0])
+					if done(m.tasks[i][0]) {
+						m.status = 1
+					} else {
+						m.status = 0
+					}
 					delete(m.selected, i)
 				}
 			}
 			m.tasks = list()
 		case 1:
-			add(m.input.Value())
+			if add(m.input.Value()) {
+				m.status = 1
+			} else {
+				m.status = 0
+			}
 			m.input.SetValue("")
 		case 2:
 			for i := range m.tasks {
 				if _, ok := m.selected[i]; ok {
-					deleteTask(m.tasks[i][0])
+					if deleteTask(m.tasks[i][0]) {
+						m.status = 1
+					} else {
+						m.status = 0
+					}
 					delete(m.selected, i)
 				}
 			}
@@ -262,10 +279,23 @@ func (m model) View() string {
 			}
 
 			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, m.tasks[i][1])
+			if m.status == 0 {
+				s += "\nFailed!\n"
+			} else if m.status == 1 {
+				s += "\nSuccess!\n"
+			}
+
+			m.status = -1
 		}
 		return s
 	} else if m.mode == 1 {
 		s := "Type in the name of the task:\n\n" + m.input.View()
+		if m.status == 0 {
+			s += "\nFailed!\n"
+		} else if m.status == 1 {
+			s += "\nSuccess!\n"
+		}
+		m.status = -1
 		return s
 
 	} else {
@@ -283,6 +313,14 @@ func (m model) View() string {
 			}
 
 			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, m.tasks[i][1])
+			if m.status == 0 {
+				s += "\nFailed!\n"
+			} else if m.status == 1 {
+				s += "\nSuccess!\n"
+
+			}
+
+			m.status = -1
 		}
 		return s
 	}
