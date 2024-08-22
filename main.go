@@ -16,6 +16,7 @@ import (
 )
 
 var conf = koanf.New(".")
+var mainErr = error(nil)
 
 type config struct {
 	url      string
@@ -40,6 +41,14 @@ func (t Task) Description() string {
 	return "Not started!"
 }
 
+type Err struct {
+	s string
+}
+
+func (e *Err) Error() string {
+	return e.s
+}
+
 func load_config() config {
 	config_path := path.Join(os.ExpandEnv("$XDG_CONFIG_HOME"), "/doit/config.yaml")
 	if err := conf.Load(file.Provider(config_path), yaml.Parser()); err != nil {
@@ -62,8 +71,8 @@ func list_tasks() []list.Item {
 	})
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		mainErr = err
+		return nil
 	}
 	r := make([]list.Item, 0)
 	t := strings.Split(string(res.Body), "\n")
@@ -77,7 +86,7 @@ func list_tasks() []list.Item {
 	return r
 }
 
-func add(task string) bool {
+func add(task string) {
 	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
@@ -87,18 +96,15 @@ func add(task string) bool {
 	})
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		mainErr = err
 	}
 
-	if res.StatusCode() == 200 {
-		return true
-	} else {
-		return false
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while adding task"}
 	}
 }
 
-func done(id string) bool {
+func done(id string) {
 	res, err := fetch.Post(cfg.url+"/done", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
@@ -108,18 +114,33 @@ func done(id string) bool {
 	})
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		mainErr = err
 	}
 
-	if res.StatusCode() == 200 {
-		return true
-	} else {
-		return false
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while marking task finished"}
 	}
 }
 
-func deleteTask(id string) bool {
+func reset(id string) {
+	res, err := fetch.Post(cfg.url+"/reset", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+	}
+
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while reseting task state"}
+	}
+}
+
+func deleteTask(id string) {
 	res, err := fetch.Post(cfg.url+"/delete", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
@@ -129,14 +150,11 @@ func deleteTask(id string) bool {
 	})
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		mainErr = err
 	}
 
-	if res.StatusCode() == 200 {
-		return true
-	} else {
-		return false
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while deleting task"}
 	}
 }
 
@@ -168,7 +186,12 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if mainErr != nil {
+		return m, tea.Quit
+	}
+
 	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -185,7 +208,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				id := m.tasks.SelectedItem().(Task).id
-				done(id)
+				status := m.tasks.SelectedItem().(Task).status
+				if status == "true" {
+					reset(id)
+				} else {
+					done(id)
+				}
 				cmd := m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
 			case "ctrl+c":
@@ -236,4 +264,5 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	fmt.Println(mainErr)
 }
