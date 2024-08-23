@@ -245,6 +245,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			case "a":
 				m.mode = 1
+				m.input.SetValue("")
 			case "r":
 				m.selected = m.tasks.SelectedItem().(Task)
 				m.mode = 2
