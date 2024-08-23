@@ -10,11 +10,15 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/go-zoox/fetch"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
+
+var style = lipgloss.NewStyle().Padding(3, 3)
+var styleTasks = lipgloss.NewStyle().PaddingLeft(3)
 
 var conf = koanf.New(".")
 var mainErr = error(nil)
@@ -255,6 +259,7 @@ func initialModel() model {
 	itemDelegate.Styles.DimmedTitle.Bold(true)
 	listTasks := list.New(list_tasks(), itemDelegate, 0, 0)
 	listTasks.Title = "Tasks"
+	listTasks.Styles.TitleBar.Align(3, 3)
 	listTasks.SetShowHelp(false)
 
 	ta := textarea.New()
@@ -341,6 +346,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.new = ""
 				m.mode = 0
 			}
+			m.input, cmd = m.input.Update(msg)
+			cmds = append(cmds, cmd)
 		} else if m.mode == 2 {
 			var cmd tea.Cmd
 			switch msg.String() {
@@ -355,6 +362,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.new = ""
 				m.mode = 0
 			}
+			m.input, cmd = m.input.Update(msg)
+			cmds = append(cmds, cmd)
 		} else if m.mode == 3 {
 			var cmd tea.Cmd
 			switch msg.String() {
@@ -369,6 +378,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.mode = 0
 			}
+			m.input, cmd = m.input.Update(msg)
+			cmds = append(cmds, cmd)
 		} else if m.mode == 4 {
 			switch msg.String() {
 			case "ctrl+s":
@@ -383,29 +394,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				deleteNote(m.selected.id)
 				m.mode = 0
 			}
+			var cmd tea.Cmd
+			m.note, cmd = m.note.Update(msg)
+			cmds = append(cmds, cmd)
 		}
 	}
 	var cmd tea.Cmd
 	m.tasks, cmd = m.tasks.Update(msg)
-	cmds = append(cmds, cmd)
-	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
-	m.note, cmd = m.note.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
 	if m.mode == 1 {
-		return "Name of the task:\n\n" + m.input.View()
+		return style.Render("Name of the task:\n\n" + m.input.View())
 	} else if m.mode == 2 {
-		return "Tag of the task:\n\n" + m.input.View()
+		return style.Render("Tag of the task:\n\n" + m.input.View())
 	} else if m.mode == 3 {
-		return "Rename the task:\n\n" + m.input.View()
+		return style.Render("Rename the task:\n\n" + m.input.View())
 	} else if m.mode == 4 {
-		return "Note of the task:\n\n" + m.note.View()
+		return style.Render("Note of the task:\n\n" + m.note.View())
 	}
-	return m.tasks.View()
+	return styleTasks.Render(m.tasks.View())
 }
 
 func main() {
