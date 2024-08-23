@@ -24,7 +24,8 @@ type config struct {
 	password string
 }
 
-var cfg = load_config()
+var cfgPath = path.Join(os.ExpandEnv("$XDG_CONFIG_HOME"), "/doit/config.yaml")
+var cfg config
 
 type Task struct {
 	id     string
@@ -50,8 +51,7 @@ func (e *Err) Error() string {
 }
 
 func load_config() config {
-	config_path := path.Join(os.ExpandEnv("$XDG_CONFIG_HOME"), "/doit/config.yaml")
-	if err := conf.Load(file.Provider(config_path), yaml.Parser()); err != nil {
+	if err := conf.Load(file.Provider(cfgPath), yaml.Parser()); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -158,10 +158,30 @@ func deleteTask(id string) {
 	}
 }
 
+func rename(id, task string) {
+	res, err := fetch.Post(cfg.url+"/rename", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+			"task":     task,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+	}
+
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while renaming task"}
+	}
+}
+
 type model struct {
-	tasks list.Model
-	input textinput.Model
-	mode  int // STATES: 0 - home; 1 - add task
+	tasks    list.Model
+	input    textinput.Model
+	mode     int  // STATES: 0 - home; 1 - add task; 2 - rename task
+	selected Task // Only used for renaming
 }
 
 func initialModel() model {
@@ -225,6 +245,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			case "a":
 				m.mode = 1
+			case "r":
+				m.selected = m.tasks.SelectedItem().(Task)
+				m.mode = 2
+				m.input.SetValue(m.selected.title)
 			}
 			var cmd tea.Cmd
 			m.tasks, cmd = m.tasks.Update(msg)
@@ -245,20 +269,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
+		} else if m.mode == 2 {
+			var cmd tea.Cmd
+			switch msg.String() {
+			case "enter":
+				rename(m.selected.id, m.input.Value())
+				m.selected.id = ""
+				cmd = m.tasks.SetItems(list_tasks())
+				cmds = append(cmds, cmd)
+				m.mode = 0
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mode = 0
+			}
+			m.input, cmd = m.input.Update(msg)
+			cmds = append(cmds, cmd)
 		}
 	}
-
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
 	if m.mode == 1 {
 		return "Name of the task:\n\n" + m.input.View()
+	} else if m.mode == 2 {
+		return "Rename the task:\n\n" + m.input.View()
 	}
 	return m.tasks.View()
 }
 
 func main() {
+	cfg = load_config()
+
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
