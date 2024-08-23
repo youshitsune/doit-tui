@@ -188,7 +188,6 @@ func initialModel() model {
 	input := textinput.New()
 	input.Focus()
 	input.CharLimit = 256
-	input.Width = 20
 
 	listTasks := list.New(list_tasks(), list.NewDefaultDelegate(), 0, 0)
 	listTasks.Title = "Tasks"
@@ -216,6 +215,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.tasks.SetSize(msg.Width, msg.Height)
+		m.input.Width = msg.Width
 
 	case tea.KeyMsg:
 		if m.mode == 0 {
