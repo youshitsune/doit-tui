@@ -29,17 +29,18 @@ var cfg config
 
 type Task struct {
 	id     string
+	tag    string
 	title  string
 	status string
 }
 
-func (t Task) FilterValue() string { return t.title }
+func (t Task) FilterValue() string { return t.title + t.tag }
 func (t Task) Title() string       { return t.title }
 func (t Task) Description() string {
 	if t.status == "true" {
-		return "Finished!"
+		return t.tag + "\nFinished!"
 	}
-	return "Not started!"
+	return t.tag + "\nNot started!"
 }
 
 type Err struct {
@@ -78,20 +79,21 @@ func list_tasks() []list.Item {
 	t := strings.Split(string(res.Body), "\n")
 	for i := range t {
 		tmp := strings.Split(t[i], "``")
-		if len(tmp) == 3 {
-			r = append(r, Task{id: tmp[0], title: tmp[1], status: tmp[2]})
+		if len(tmp) == 4 {
+			r = append(r, Task{id: tmp[0], title: tmp[1], status: tmp[2], tag: tmp[3]})
 		}
 	}
 
 	return r
 }
 
-func add(task string) {
+func add(task, tag string) {
 	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
 		Query: map[string]string{
 			"user":     cfg.username,
 			"password": cfg.password,
 			"task":     task,
+			"tag":      tag,
 		},
 	})
 
@@ -180,16 +182,21 @@ func rename(id, task string) {
 type model struct {
 	tasks    list.Model
 	input    textinput.Model
-	mode     int  // STATES: 0 - home; 1 - add task; 2 - rename task
-	selected Task // Only used for renaming
+	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task
+	selected Task   // Only used for renaming
+	new      string // Only used for creating task
 }
 
 func initialModel() model {
 	input := textinput.New()
 	input.Focus()
 	input.CharLimit = 256
-
-	listTasks := list.New(list_tasks(), list.NewDefaultDelegate(), 0, 0)
+	itemDelegate := list.NewDefaultDelegate()
+	itemDelegate.SetHeight(3)
+	itemDelegate.Styles.NormalTitle.Bold(true)
+	itemDelegate.Styles.SelectedTitle.Bold(true)
+	itemDelegate.Styles.DimmedTitle.Bold(true)
+	listTasks := list.New(list_tasks(), itemDelegate, 0, 0)
 	listTasks.Title = "Tasks"
 	listTasks.SetShowHelp(false)
 
@@ -245,7 +252,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.SetValue("")
 			case "r":
 				m.selected = m.tasks.SelectedItem().(Task)
-				m.mode = 2
+				m.mode = 3
 				m.input.SetValue(m.selected.title)
 			}
 
@@ -253,16 +260,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			switch msg.String() {
 			case "enter":
-				add(m.input.Value())
+				m.new = m.input.Value()
+				cmd = m.tasks.SetItems(list_tasks())
+				cmds = append(cmds, cmd)
+				m.mode = 2
+				m.input.SetValue("")
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.new = ""
+				m.mode = 0
+			}
+		} else if m.mode == 2 {
+			var cmd tea.Cmd
+			switch msg.String() {
+			case "enter":
+				add(m.new, m.input.Value())
 				cmd = m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
 				m.mode = 0
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
+				m.new = ""
 				m.mode = 0
 			}
-		} else if m.mode == 2 {
+		} else if m.mode == 3 {
 			var cmd tea.Cmd
 			switch msg.String() {
 			case "enter":
@@ -290,6 +313,8 @@ func (m model) View() string {
 	if m.mode == 1 {
 		return "Name of the task:\n\n" + m.input.View()
 	} else if m.mode == 2 {
+		return "Tag of the task:\n\n" + m.input.View()
+	} else if m.mode == 3 {
 		return "Rename the task:\n\n" + m.input.View()
 	}
 	return m.tasks.View()
