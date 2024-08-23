@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	list "github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-zoox/fetch"
@@ -87,6 +88,23 @@ func list_tasks() []list.Item {
 	return r
 }
 
+func get_note(id string) string {
+	res, err := fetch.Post(cfg.url+"/getnote", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+		return ""
+	}
+
+	return string(res.Body)
+}
+
 func add(task, tag string) {
 	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
 		Query: map[string]string{
@@ -103,6 +121,25 @@ func add(task, tag string) {
 
 	if res.StatusCode() != 200 {
 		mainErr = &Err{"Error while adding task"}
+	}
+}
+
+func addnote(id, note string) {
+	res, err := fetch.Post(cfg.url+"/newnote", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+			"note":     note,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+	}
+
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while adding note"}
 	}
 }
 
@@ -160,6 +197,24 @@ func deleteTask(id string) {
 	}
 }
 
+func deleteNote(id string) {
+	res, err := fetch.Post(cfg.url+"/deletenote", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+	}
+
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Error while deleting note"}
+	}
+}
+
 func rename(id, task string) {
 	res, err := fetch.Post(cfg.url+"/rename", &fetch.Config{
 		Query: map[string]string{
@@ -182,7 +237,8 @@ func rename(id, task string) {
 type model struct {
 	tasks    list.Model
 	input    textinput.Model
-	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task
+	note     textarea.Model
+	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task; 4 - note
 	selected Task   // Only used for renaming
 	new      string // Only used for creating task
 }
@@ -191,6 +247,7 @@ func initialModel() model {
 	input := textinput.New()
 	input.Focus()
 	input.CharLimit = 256
+
 	itemDelegate := list.NewDefaultDelegate()
 	itemDelegate.SetHeight(3)
 	itemDelegate.Styles.NormalTitle.Bold(true)
@@ -200,15 +257,19 @@ func initialModel() model {
 	listTasks.Title = "Tasks"
 	listTasks.SetShowHelp(false)
 
+	ta := textarea.New()
+	ta.Focus()
+
 	return model{
 		tasks: listTasks,
 		mode:  0,
 		input: input,
+		note:  ta,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, textarea.Blink)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -254,6 +315,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected = m.tasks.SelectedItem().(Task)
 				m.mode = 3
 				m.input.SetValue(m.selected.title)
+			case "n":
+				m.selected = m.tasks.SelectedItem().(Task)
+				note := get_note(m.selected.id)
+				if note == "" {
+					m.note.SetValue("")
+				} else {
+					m.note.SetValue(note)
+				}
+				m.mode = 4
 			}
 
 		} else if m.mode == 1 {
@@ -290,7 +360,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				rename(m.selected.id, m.input.Value())
-				m.selected.id = ""
+				m.selected = Task{}
 				cmd = m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
 				m.mode = 0
@@ -299,12 +369,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.mode = 0
 			}
+		} else if m.mode == 4 {
+			switch msg.String() {
+			case "ctrl+s":
+				addnote(m.selected.id, m.note.Value())
+				m.selected = Task{}
+				m.mode = 0
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mode = 0
+			case "ctrl+d":
+				deleteNote(m.selected.id)
+				m.mode = 0
+			}
 		}
 	}
 	var cmd tea.Cmd
 	m.tasks, cmd = m.tasks.Update(msg)
 	cmds = append(cmds, cmd)
 	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
+	m.note, cmd = m.note.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
@@ -316,6 +402,8 @@ func (m model) View() string {
 		return "Tag of the task:\n\n" + m.input.View()
 	} else if m.mode == 3 {
 		return "Rename the task:\n\n" + m.input.View()
+	} else if m.mode == 4 {
+		return "Note of the task:\n\n" + m.note.View()
 	}
 	return m.tasks.View()
 }
