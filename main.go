@@ -261,6 +261,7 @@ func initialModel() model {
 	listTasks.Title = "Tasks"
 	listTasks.Styles.TitleBar.Align(3, 3)
 	listTasks.SetShowHelp(false)
+	listTasks.DisableQuitKeybindings()
 
 	ta := textarea.New()
 	ta.Focus()
@@ -306,7 +307,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				cmd := m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
-			case "ctrl+c":
+			case "ctrl+c", "q":
 				return m, tea.Quit
 			case "d":
 				id := m.tasks.SelectedItem().(Task).id
