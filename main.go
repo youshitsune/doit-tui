@@ -220,9 +220,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.mode == 0 {
 			if m.tasks.FilterState() == list.Filtering {
-				var cmd tea.Cmd
-				m.tasks, cmd = m.tasks.Update(msg)
-				cmds = append(cmds, cmd)
 				break
 			}
 			switch msg.String() {
@@ -251,9 +248,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = 2
 				m.input.SetValue(m.selected.title)
 			}
-			var cmd tea.Cmd
-			m.tasks, cmd = m.tasks.Update(msg)
-			cmds = append(cmds, cmd)
 
 		} else if m.mode == 1 {
 			var cmd tea.Cmd
@@ -268,8 +262,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.mode = 0
 			}
-			m.input, cmd = m.input.Update(msg)
-			cmds = append(cmds, cmd)
 		} else if m.mode == 2 {
 			var cmd tea.Cmd
 			switch msg.String() {
@@ -284,10 +276,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.mode = 0
 			}
-			m.input, cmd = m.input.Update(msg)
-			cmds = append(cmds, cmd)
 		}
 	}
+	var cmd tea.Cmd
+	m.tasks, cmd = m.tasks.Update(msg)
+	cmds = append(cmds, cmd)
+	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
