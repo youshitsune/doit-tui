@@ -238,11 +238,30 @@ func rename(id, task string) {
 	}
 }
 
+func editTag(id, tag string) {
+	res, err := fetch.Post(cfg.url+"/edittag", &fetch.Config{
+		Query: map[string]string{
+			"user":     cfg.username,
+			"password": cfg.password,
+			"id":       id,
+			"tag":      tag,
+		},
+	})
+
+	if err != nil {
+		mainErr = err
+	}
+
+	if res.StatusCode() != 200 {
+		mainErr = &Err{"Eror while editing tag"}
+	}
+}
+
 type model struct {
 	tasks    list.Model
 	input    textinput.Model
 	note     textarea.Model
-	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task; 4 - note
+	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task; 4 - note; 5 - edit tag
 	selected Task   // Only used for renaming
 	new      string // Only used for creating task
 }
@@ -330,6 +349,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.note.SetValue(note)
 				}
 				m.mode = 4
+			case "t":
+				m.selected = m.tasks.SelectedItem().(Task)
+				m.mode = 5
+				m.input.SetValue(m.selected.tag)
 			}
 
 		} else if m.mode == 1 {
@@ -398,6 +421,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.note, cmd = m.note.Update(msg)
 			cmds = append(cmds, cmd)
+		} else if m.mode == 5 {
+			switch msg.String() {
+			case "enter":
+				editTag(m.selected.id, m.input.Value())
+				m.tasks.SetItems(list_tasks())
+				m.selected = Task{}
+				m.mode = 0
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.mode = 0
+			}
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			cmds = append(cmds, cmd)
 		}
 	}
 	var cmd tea.Cmd
@@ -415,6 +453,8 @@ func (m model) View() string {
 		return style.Render("Rename the task:\n\n" + m.input.View())
 	} else if m.mode == 4 {
 		return style.Render("Note of the task:\n\n" + m.note.View())
+	} else if m.mode == 5 {
+		return style.Render("Edit tag of the task:\n\n" + m.input.View())
 	}
 	return styleTasks.Render(m.tasks.View())
 }
