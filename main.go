@@ -29,6 +29,15 @@ type config struct {
 	password string
 }
 
+const (
+	Home int = iota
+	Add
+	AddTag
+	Rename
+	Note
+	EditTag
+)
+
 var cfgPath = path.Join(os.ExpandEnv("$XDG_CONFIG_HOME"), "/doit/config.yaml")
 var cfg config
 
@@ -261,9 +270,9 @@ type model struct {
 	tasks    list.Model
 	input    textinput.Model
 	note     textarea.Model
-	mode     int    // STATES: 0 - home; 1 - add task; 2 - add tag; 3 - rename task; 4 - note; 5 - edit tag
-	selected Task   // Only used for renaming
-	new      string // Only used for creating task
+	mode     int
+	selected Task
+	new      string
 }
 
 func initialModel() model {
@@ -287,7 +296,7 @@ func initialModel() model {
 
 	return model{
 		tasks: listTasks,
-		mode:  0,
+		mode:  Home,
 		input: input,
 		note:  ta,
 	}
@@ -311,7 +320,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.Width = msg.Width
 
 	case tea.KeyMsg:
-		if m.mode == 0 {
+		if m.mode == Home {
 			if m.tasks.FilterState() == list.Filtering {
 				break
 			}
@@ -334,11 +343,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd := m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
 			case "a":
-				m.mode = 1
+				m.mode = Add
 				m.input.SetValue("")
 			case "r":
 				m.selected = m.tasks.SelectedItem().(Task)
-				m.mode = 3
+				m.mode = Rename
 				m.input.SetValue(m.selected.title)
 			case "n":
 				m.selected = m.tasks.SelectedItem().(Task)
@@ -348,47 +357,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.note.SetValue(note)
 				}
-				m.mode = 4
+				m.mode = Note
 			case "t":
 				m.selected = m.tasks.SelectedItem().(Task)
-				m.mode = 5
+				m.mode = EditTag
 				m.input.SetValue(m.selected.tag)
 			}
 
-		} else if m.mode == 1 {
+		} else if m.mode == Add {
 			var cmd tea.Cmd
 			switch msg.String() {
 			case "enter":
 				m.new = m.input.Value()
 				cmd = m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
-				m.mode = 2
+				m.mode = AddTag
 				m.input.SetValue("")
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
 				m.new = ""
-				m.mode = 0
+				m.mode = Home
 			}
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
-		} else if m.mode == 2 {
+		} else if m.mode == AddTag {
 			var cmd tea.Cmd
 			switch msg.String() {
 			case "enter":
 				add(m.new, m.input.Value())
 				cmd = m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
-				m.mode = 0
+				m.mode = Home
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
 				m.new = ""
-				m.mode = 0
+				m.mode = Home
 			}
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
-		} else if m.mode == 3 {
+		} else if m.mode == Rename {
 			var cmd tea.Cmd
 			switch msg.String() {
 			case "enter":
@@ -396,42 +405,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected = Task{}
 				cmd = m.tasks.SetItems(list_tasks())
 				cmds = append(cmds, cmd)
-				m.mode = 0
+				m.mode = Home
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
-				m.mode = 0
+				m.mode = Home
 			}
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
-		} else if m.mode == 4 {
+		} else if m.mode == Note {
 			switch msg.String() {
 			case "ctrl+s":
 				addnote(m.selected.id, m.note.Value())
 				m.selected = Task{}
-				m.mode = 0
+				m.mode = Home
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
-				m.mode = 0
+				m.mode = Home
 			case "ctrl+d":
 				deleteNote(m.selected.id)
-				m.mode = 0
+				m.mode = Home
 			}
 			var cmd tea.Cmd
 			m.note, cmd = m.note.Update(msg)
 			cmds = append(cmds, cmd)
-		} else if m.mode == 5 {
+		} else if m.mode == EditTag {
 			switch msg.String() {
 			case "enter":
 				editTag(m.selected.id, m.input.Value())
 				m.tasks.SetItems(list_tasks())
 				m.selected = Task{}
-				m.mode = 0
+				m.mode = Home
 			case "ctrl+c":
 				return m, tea.Quit
 			case "esc":
-				m.mode = 0
+				m.mode = Home
 			}
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
@@ -445,15 +454,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.mode == 1 {
+	if m.mode == Add {
 		return style.Render("Name of the task:\n\n" + m.input.View())
-	} else if m.mode == 2 {
+	} else if m.mode == AddTag {
 		return style.Render("Tag of the task:\n\n" + m.input.View())
-	} else if m.mode == 3 {
+	} else if m.mode == Rename {
 		return style.Render("Rename the task:\n\n" + m.input.View())
-	} else if m.mode == 4 {
+	} else if m.mode == Note {
 		return style.Render("Note of the task:\n\n" + m.note.View())
-	} else if m.mode == 5 {
+	} else if m.mode == EditTag {
 		return style.Render("Edit tag of the task:\n\n" + m.input.View())
 	}
 	return styleTasks.Render(m.tasks.View())
