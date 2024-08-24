@@ -21,6 +21,7 @@ var style = lipgloss.NewStyle().Padding(3, 3)
 var styleTasks = lipgloss.NewStyle().PaddingLeft(3)
 
 var conf = koanf.New(".")
+var auth *fetch.Config
 var mainErr = error(nil)
 
 type config struct {
@@ -78,12 +79,7 @@ func load_config() config {
 }
 
 func list_tasks() []list.Item {
-	res, err := fetch.Post(cfg.url+"/list", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-		},
-	})
+	res, err := fetch.Post(cfg.url+"/list", auth)
 
 	if err != nil {
 		mainErr = err
@@ -102,13 +98,8 @@ func list_tasks() []list.Item {
 }
 
 func get_note(id string) string {
-	res, err := fetch.Post(cfg.url+"/getnote", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-		},
-	})
+	auth.Query = map[string]string{"id": id}
+	res, err := fetch.Post(cfg.url+"/getnote", auth)
 
 	if err != nil {
 		mainErr = err
@@ -119,14 +110,12 @@ func get_note(id string) string {
 }
 
 func add(task, tag string) {
-	res, err := fetch.Post(cfg.url+"/new", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"task":     task,
-			"tag":      tag,
-		},
-	})
+	auth.Query = map[string]string{
+		"task": task,
+		"tag":  tag,
+	}
+
+	res, err := fetch.Post(cfg.url+"/new", auth)
 
 	if err != nil {
 		mainErr = err
@@ -138,14 +127,12 @@ func add(task, tag string) {
 }
 
 func addnote(id, note string) {
-	res, err := fetch.Post(cfg.url+"/newnote", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-			"note":     note,
-		},
-	})
+	auth.Query = map[string]string{
+		"id":   id,
+		"note": note,
+	}
+
+	res, err := fetch.Post(cfg.url+"/newnote", auth)
 
 	if err != nil {
 		mainErr = err
@@ -157,13 +144,8 @@ func addnote(id, note string) {
 }
 
 func done(id string) {
-	res, err := fetch.Post(cfg.url+"/done", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-		},
-	})
+	auth.Query = map[string]string{"id": id}
+	res, err := fetch.Post(cfg.url+"/done", auth)
 
 	if err != nil {
 		mainErr = err
@@ -175,13 +157,8 @@ func done(id string) {
 }
 
 func reset(id string) {
-	res, err := fetch.Post(cfg.url+"/reset", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-		},
-	})
+	auth.Query = map[string]string{"id": id}
+	res, err := fetch.Post(cfg.url+"/reset", auth)
 
 	if err != nil {
 		mainErr = err
@@ -193,13 +170,8 @@ func reset(id string) {
 }
 
 func deleteTask(id string) {
-	res, err := fetch.Post(cfg.url+"/delete", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-		},
-	})
+	auth.Query = map[string]string{"id": id}
+	res, err := fetch.Post(cfg.url+"/delete", auth)
 
 	if err != nil {
 		mainErr = err
@@ -211,13 +183,8 @@ func deleteTask(id string) {
 }
 
 func deleteNote(id string) {
-	res, err := fetch.Post(cfg.url+"/deletenote", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-		},
-	})
+	auth.Query = map[string]string{"id": id}
+	res, err := fetch.Post(cfg.url+"/deletenote", auth)
 
 	if err != nil {
 		mainErr = err
@@ -229,14 +196,11 @@ func deleteNote(id string) {
 }
 
 func rename(id, task string) {
-	res, err := fetch.Post(cfg.url+"/rename", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-			"task":     task,
-		},
-	})
+	auth.Query = map[string]string{
+		"id":   id,
+		"task": task,
+	}
+	res, err := fetch.Post(cfg.url+"/rename", auth)
 
 	if err != nil {
 		mainErr = err
@@ -248,21 +212,18 @@ func rename(id, task string) {
 }
 
 func editTag(id, tag string) {
-	res, err := fetch.Post(cfg.url+"/edittag", &fetch.Config{
-		Query: map[string]string{
-			"user":     cfg.username,
-			"password": cfg.password,
-			"id":       id,
-			"tag":      tag,
-		},
-	})
+	auth.Query = map[string]string{
+		"id":  id,
+		"tag": tag,
+	}
+	res, err := fetch.Post(cfg.url+"/edittag", auth)
 
 	if err != nil {
 		mainErr = err
 	}
 
 	if res.StatusCode() != 200 {
-		mainErr = &Err{"Eror while editing tag"}
+		mainErr = &Err{"Error while editing tag"}
 	}
 }
 
@@ -470,7 +431,10 @@ func (m model) View() string {
 
 func main() {
 	cfg = load_config()
-
+	auth = &fetch.Config{
+		Username: cfg.username,
+		Password: cfg.password,
+	}
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
